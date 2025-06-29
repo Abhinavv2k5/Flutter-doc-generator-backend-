@@ -10,7 +10,6 @@ app = Flask(__name__)
 @app.route("/generate-report", methods=["POST"])
 def generate_report():
     try:
-        # Extract form data and uploaded files
         data = request.form.to_dict()
         template = request.files.get("template")
         if not template:
@@ -18,28 +17,43 @@ def generate_report():
 
         doc = Document(template)
 
-        # Replace text placeholders
-        for para in doc.paragraphs:
-            for key, value in data.items():
-                placeholder = f"{{{{{key}}}}}"
-                if placeholder in para.text:
-                    para.text = para.text.replace(placeholder, value)
+        # Mapping from Flutter field labels → Template placeholders
+        field_map = {
+            "Replica #": "ReplicaNo",
+            "Component / Location": "ComponentLocation",
+            "Material of Construction": "Material",
+            "Hardness In HB": "Hardness",
+            "Observations": "PhotoLocation",
+            "Etchant": "Etchant",
+            "Microstructure": "Microstructure",
+            "Structural Damage Rating": "DamageRating",
+            "Life Exhaustion": "LifeExhaustion",
+            "Inspection Interval": "InspectionInterval",
+            "Result / Remarks": "ResultRemarks"
+        }
 
-        # Define mapping between image field names and placeholders in DOCX
+        # 🔁 Replace text placeholders
+        for para in doc.paragraphs:
+            for form_key, value in data.items():
+                if form_key in field_map:
+                    placeholder = f"{{{{{field_map[form_key]}}}}}"
+                    if placeholder in para.text:
+                        para.text = para.text.replace(placeholder, value)
+
+        # 🖼 Replace image placeholders inline
         image_placeholders = {
             "location_photo": "{{PhotoLocation}}",
             "magnification_100x": "{{Magnification100x}}",
             "magnification_500x": "{{Magnification500x}}"
         }
 
-        # Replace image placeholders inline
         for para in doc.paragraphs:
             for field, placeholder in image_placeholders.items():
                 if placeholder in para.text and field in request.files:
-                    para.clear()  # Clear existing placeholder text
+                    para.clear()  # Remove placeholder text
                     para.add_run().add_picture(request.files[field], width=Inches(4.0))
 
-        # Save document to temp location
+        # Save final output
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
 
