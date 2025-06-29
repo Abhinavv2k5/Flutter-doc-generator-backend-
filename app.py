@@ -17,7 +17,7 @@ def generate_report():
 
         doc = Document(template)
 
-        # Mapping from Flutter field labels → Template placeholders
+        # Mapping from Flutter fields to docx placeholders
         field_map = {
             "Replica #": "ReplicaNo",
             "Component / Location": "ComponentLocation",
@@ -32,15 +32,16 @@ def generate_report():
             "Result / Remarks": "ResultRemarks"
         }
 
-        # 🔁 Replace text placeholders
+        # Replace text placeholders in runs
         for para in doc.paragraphs:
-            for form_key, value in data.items():
-                if form_key in field_map:
-                    placeholder = f"{{{{{field_map[form_key]}}}}}"
-                    if placeholder in para.text:
-                        para.text = para.text.replace(placeholder, value)
+            for run in para.runs:
+                for form_key, value in data.items():
+                    if form_key in field_map:
+                        placeholder = f"{{{{{field_map[form_key]}}}}}"
+                        if placeholder in run.text:
+                            run.text = run.text.replace(placeholder, value)
 
-        # 🖼 Replace image placeholders inline
+        # Replace image placeholders
         image_placeholders = {
             "location_photo": "{{PhotoLocation}}",
             "magnification_100x": "{{Magnification100x}}",
@@ -50,10 +51,10 @@ def generate_report():
         for para in doc.paragraphs:
             for field, placeholder in image_placeholders.items():
                 if placeholder in para.text and field in request.files:
-                    para.clear()  # Remove placeholder text
+                    para.clear()
                     para.add_run().add_picture(request.files[field], width=Inches(4.0))
 
-        # Save final output
+        # Save to temp
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
 
