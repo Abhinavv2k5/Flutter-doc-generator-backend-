@@ -17,7 +17,7 @@ def generate_report():
 
         doc = Document(template)
 
-        # Updated: Removed "Observations" since it's an image now
+        # Removed "Observations" (it's now an image)
         field_map = {
             "Replica #": "ReplicaNo",
             "Component / Location": "ComponentLocation",
@@ -31,26 +31,28 @@ def generate_report():
             "Result / Remarks": "ResultRemarks"
         }
 
+        # Image placeholders
         image_placeholders = {
             "location_photo": "{{PhotoLocation}}",
             "magnification_100x": "{{Magnification100x}}",
             "magnification_500x": "{{Magnification500x}}"
         }
 
-        # Standard image size
-        STANDARD_WIDTH = Inches(4.5)
+        # Standard size to prevent layout break
+        IMAGE_WIDTH = Inches(2.0)
 
-        def replace_text_paragraph(para):
-            full_text = ''.join(run.text for run in para.runs)
+        # --- Replace text placeholders ---
+        def replace_text_paragraph(paragraph):
+            full_text = ''.join(run.text for run in paragraph.runs)
             replaced = full_text
             for key, value in data.items():
                 if key in field_map:
                     placeholder = f"{{{{{field_map[key]}}}}}"
                     replaced = replaced.replace(placeholder, value)
             if full_text != replaced:
-                for run in para.runs:
+                for run in paragraph.runs:
                     run.text = ''
-                para.runs[0].text = replaced
+                paragraph.runs[0].text = replaced
 
         for para in doc.paragraphs:
             replace_text_paragraph(para)
@@ -61,23 +63,24 @@ def generate_report():
                     for para in cell.paragraphs:
                         replace_text_paragraph(para)
 
-        def replace_image_paragraphs(paragraphs):
+        # --- Replace image placeholders ---
+        def replace_image_placeholders(paragraphs):
             for para in paragraphs:
                 for field, placeholder in image_placeholders.items():
                     if placeholder in para.text and field in request.files:
                         para.clear()
-                        para.add_run().add_picture(request.files[field], width=STANDARD_WIDTH)
+                        para.add_run().add_picture(request.files[field], width=IMAGE_WIDTH)
 
-        replace_image_paragraphs(doc.paragraphs)
+        replace_image_placeholders(doc.paragraphs)
 
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
-                    replace_image_paragraphs(cell.paragraphs)
+                    replace_image_placeholders(cell.paragraphs)
 
+        # --- Save file and return ---
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
-
         return send_file(temp_path, as_attachment=True, download_name="generated_report.docx")
 
     except Exception as e:
