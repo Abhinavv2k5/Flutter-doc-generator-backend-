@@ -17,7 +17,7 @@ def generate_report():
 
         doc = Document(template)
 
-        # Removed "Observations" (it's now an image)
+        # Mapping fields from Flutter → Word placeholders
         field_map = {
             "Replica #": "ReplicaNo",
             "Component / Location": "ComponentLocation",
@@ -31,17 +31,15 @@ def generate_report():
             "Result / Remarks": "ResultRemarks"
         }
 
-        # Image placeholders
         image_placeholders = {
             "location_photo": "{{PhotoLocation}}",
             "magnification_100x": "{{Magnification100x}}",
             "magnification_500x": "{{Magnification500x}}"
         }
 
-        # Standard size to prevent layout break
-        IMAGE_WIDTH = Inches(2.0)
+        # Slightly larger image width
+        IMAGE_WIDTH = Inches(2.4)
 
-        # --- Replace text placeholders ---
         def replace_text_paragraph(paragraph):
             full_text = ''.join(run.text for run in paragraph.runs)
             replaced = full_text
@@ -54,6 +52,7 @@ def generate_report():
                     run.text = ''
                 paragraph.runs[0].text = replaced
 
+        # Replace text in paragraphs
         for para in doc.paragraphs:
             replace_text_paragraph(para)
 
@@ -63,25 +62,30 @@ def generate_report():
                     for para in cell.paragraphs:
                         replace_text_paragraph(para)
 
-        # --- Replace image placeholders ---
-        def replace_image_placeholders(paragraphs):
+        # Replace image placeholders
+        def replace_image_paragraphs(paragraphs):
             for para in paragraphs:
                 for field, placeholder in image_placeholders.items():
                     if placeholder in para.text and field in request.files:
                         para.clear()
                         para.add_run().add_picture(request.files[field], width=IMAGE_WIDTH)
 
-        replace_image_placeholders(doc.paragraphs)
+        replace_image_paragraphs(doc.paragraphs)
 
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
-                    replace_image_placeholders(cell.paragraphs)
+                    replace_image_paragraphs(cell.paragraphs)
 
-        # --- Save file and return ---
-        temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
+        # Custom filename support
+        user_filename = data.get("filename", "generated_report").strip()
+        if not user_filename.lower().endswith(".docx"):
+            user_filename += ".docx"
+
+        temp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}_{user_filename}")
         doc.save(temp_path)
-        return send_file(temp_path, as_attachment=True, download_name="generated_report.docx")
+
+        return send_file(temp_path, as_attachment=True, download_name=user_filename)
 
     except Exception as e:
         app.logger.error(f"Server error: {e}")
