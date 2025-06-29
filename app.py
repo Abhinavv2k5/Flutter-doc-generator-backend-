@@ -17,7 +17,7 @@ def generate_report():
 
         doc = Document(template)
 
-        # Mapping from Flutter fields to docx placeholders
+        # Mapping from Flutter input fields to placeholders in the DOCX
         field_map = {
             "Replica #": "ReplicaNo",
             "Component / Location": "ComponentLocation",
@@ -32,29 +32,55 @@ def generate_report():
             "Result / Remarks": "ResultRemarks"
         }
 
-        # Replace text placeholders in runs
-        for para in doc.paragraphs:
-            for run in para.runs:
-                for form_key, value in data.items():
-                    if form_key in field_map:
-                        placeholder = f"{{{{{field_map[form_key]}}}}}"
-                        if placeholder in run.text:
-                            run.text = run.text.replace(placeholder, value)
-
-        # Replace image placeholders
         image_placeholders = {
             "location_photo": "{{PhotoLocation}}",
             "magnification_100x": "{{Magnification100x}}",
             "magnification_500x": "{{Magnification500x}}"
         }
 
+        # Function to robustly replace placeholders (handles split runs)
+        def replace_text_placeholders(paragraph):
+            full_text = ''.join(run.text for run in paragraph.runs)
+            replaced_text = full_text
+            for form_key, value in data.items():
+                if form_key in field_map:
+                    placeholder = f"{{{{{field_map[form_key]}}}}}"
+                    replaced_text = replaced_text.replace(placeholder, value)
+
+            if full_text != replaced_text:
+                for run in paragraph.runs:
+                    run.text = ''
+                paragraph.runs[0].text = replaced_text
+
+        # Replace text in regular paragraphs
+        for para in doc.paragraphs:
+            replace_text_placeholders(para)
+
+        # Replace text in tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        replace_text_placeholders(para)
+
+        # Replace image placeholders (in regular paragraphs)
         for para in doc.paragraphs:
             for field, placeholder in image_placeholders.items():
                 if placeholder in para.text and field in request.files:
                     para.clear()
                     para.add_run().add_picture(request.files[field], width=Inches(4.0))
 
-        # Save to temp
+        # Replace image placeholders (in tables)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        for field, placeholder in image_placeholders.items():
+                            if placeholder in para.text and field in request.files:
+                                para.clear()
+                                para.add_run().add_picture(request.files[field], width=Inches(4.0))
+
+        # Save and return the generated report
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
 
