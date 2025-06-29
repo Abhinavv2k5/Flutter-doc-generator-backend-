@@ -1,5 +1,6 @@
 from flask import Flask, request, send_file
 from docx import Document
+from docx.shared import Inches
 import os
 import tempfile
 import uuid
@@ -9,26 +10,39 @@ app = Flask(__name__)
 @app.route("/generate-report", methods=["POST"])
 def generate_report():
     try:
+        # Extract form data and uploaded files
         data = request.form.to_dict()
         template = request.files.get("template")
         if not template:
             return "Template required", 400
 
         doc = Document(template)
+
+        # Replace text placeholders
         for para in doc.paragraphs:
             for key, value in data.items():
-                if f"{{{{{key}}}}}" in para.text:
-                    para.text = para.text.replace(f"{{{{{key}}}}}", value)
+                placeholder = f"{{{{{key}}}}}"
+                if placeholder in para.text:
+                    para.text = para.text.replace(placeholder, value)
 
-        for image_field in ["location_photo", "magnification_100x", "magnification_500x"]:
-            if image_field in request.files:
-                doc.add_paragraph(image_field.replace("_", " ").title())
-                doc.add_picture(request.files[image_field], width=doc.sections[0].page_width * 0.4)
+        # Define mapping between image field names and placeholders in DOCX
+        image_placeholders = {
+            "location_photo": "{{PhotoLocation}}",
+            "magnification_100x": "{{Magnification100x}}",
+            "magnification_500x": "{{Magnification500x}}"
+        }
 
+        # Replace image placeholders inline
+        for para in doc.paragraphs:
+            for field, placeholder in image_placeholders.items():
+                if placeholder in para.text and field in request.files:
+                    para.clear()  # Clear existing placeholder text
+                    para.add_run().add_picture(request.files[field], width=Inches(4.0))
+
+        # Save document to temp location
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
 
-        # ✅ DO NOT delete the file in this request
         return send_file(temp_path, as_attachment=True, download_name="generated_report.docx")
 
     except Exception as e:
