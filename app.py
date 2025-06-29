@@ -17,7 +17,6 @@ def generate_report():
 
         doc = Document(template)
 
-        # Mapping from Flutter input fields to placeholders in the DOCX
         field_map = {
             "Replica #": "ReplicaNo",
             "Component / Location": "ComponentLocation",
@@ -38,7 +37,6 @@ def generate_report():
             "magnification_500x": "{{Magnification500x}}"
         }
 
-        # Function to robustly replace placeholders (handles split runs)
         def replace_text_placeholders(paragraph):
             full_text = ''.join(run.text for run in paragraph.runs)
             replaced_text = full_text
@@ -52,25 +50,22 @@ def generate_report():
                     run.text = ''
                 paragraph.runs[0].text = replaced_text
 
-        # Replace text in regular paragraphs
         for para in doc.paragraphs:
             replace_text_placeholders(para)
 
-        # Replace text in tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for para in cell.paragraphs:
                         replace_text_placeholders(para)
 
-        # Replace image placeholders (in regular paragraphs)
+        # Replace image placeholders
         for para in doc.paragraphs:
             for field, placeholder in image_placeholders.items():
                 if placeholder in para.text and field in request.files:
                     para.clear()
                     para.add_run().add_picture(request.files[field], width=Inches(4.0))
 
-        # Replace image placeholders (in tables)
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -80,10 +75,26 @@ def generate_report():
                                 para.clear()
                                 para.add_run().add_picture(request.files[field], width=Inches(4.0))
 
-        # Save and return the generated report
+        # 🔁 Replace last 3 real images (not placeholders) at the end of doc
+        images_to_replace = [
+            request.files.get("location_photo"),
+            request.files.get("magnification_100x"),
+            request.files.get("magnification_500x")
+        ]
+        image_idx = 0
+
+        for i, para in enumerate(reversed(doc.paragraphs)):
+            if image_idx >= 3:
+                break
+            if para.runs and any(run._element.xpath(".//w:drawing") for run in para.runs):
+                para.clear()
+                if images_to_replace[2 - image_idx]:
+                    para.add_run().add_picture(images_to_replace[2 - image_idx], width=Inches(4.0))
+                image_idx += 1
+
+        # Save
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
-
         return send_file(temp_path, as_attachment=True, download_name="generated_report.docx")
 
     except Exception as e:
