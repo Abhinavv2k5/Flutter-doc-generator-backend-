@@ -17,13 +17,12 @@ def generate_report():
 
         doc = Document(template)
 
-        # Field mapping from Flutter -> Template placeholders
+        # Updated: Removed "Observations" since it's an image now
         field_map = {
             "Replica #": "ReplicaNo",
             "Component / Location": "ComponentLocation",
             "Material of Construction": "Material",
             "Hardness In HB": "Hardness",
-            "Observations": "PhotoLocation",
             "Etchant": "Etchant",
             "Microstructure": "Microstructure",
             "Structural Damage Rating": "DamageRating",
@@ -38,7 +37,9 @@ def generate_report():
             "magnification_500x": "{{Magnification500x}}"
         }
 
-        # Helper function to replace text in a paragraph
+        # Standard image size
+        STANDARD_WIDTH = Inches(4.5)
+
         def replace_text_paragraph(para):
             full_text = ''.join(run.text for run in para.runs)
             replaced = full_text
@@ -51,24 +52,21 @@ def generate_report():
                     run.text = ''
                 para.runs[0].text = replaced
 
-        # Replace text in document paragraphs
         for para in doc.paragraphs:
             replace_text_paragraph(para)
 
-        # Replace text in tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for para in cell.paragraphs:
                         replace_text_paragraph(para)
 
-        # Replace image placeholders in all paragraphs
         def replace_image_paragraphs(paragraphs):
             for para in paragraphs:
                 for field, placeholder in image_placeholders.items():
                     if placeholder in para.text and field in request.files:
                         para.clear()
-                        para.add_run().add_picture(request.files[field], width=Inches(4.0))
+                        para.add_run().add_picture(request.files[field], width=STANDARD_WIDTH)
 
         replace_image_paragraphs(doc.paragraphs)
 
@@ -77,7 +75,6 @@ def generate_report():
                 for cell in row.cells:
                     replace_image_paragraphs(cell.paragraphs)
 
-        # Save generated file
         temp_path = os.path.join(tempfile.gettempdir(), f"generated_{uuid.uuid4().hex}.docx")
         doc.save(temp_path)
 
